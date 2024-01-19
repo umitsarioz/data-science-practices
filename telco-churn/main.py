@@ -2,7 +2,9 @@ import os
 import warnings
 from typing import List
 
+import matplotlib.pyplot as plt
 import pandas as pd
+import seaborn as sns
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, roc_auc_score
 from sklearn.model_selection import train_test_split
@@ -184,6 +186,36 @@ def train_and_evaluate(df: pd.DataFrame, verbose=True) -> dict:
     return dct
 
 
+def plot_classification_report(df_classification_report: pd.DataFrame, title='Classification Report',
+                               cmap='RdBu') -> None:
+    data = df_classification_report.T.iloc[:-2, :-1]
+    class_names = data.index.tolist()
+    class_names.remove('accuracy')
+    xlabel = 'Metrics'
+    ylabel = 'Classes'
+    xticklabels = ['Precision', 'Recall', 'F1-score']
+    font1 = {'family': 'serif', 'color': 'blue', 'size': 20}
+    font2 = {'family': 'serif', 'color': 'darkred', 'size': 15}
+
+    sns.heatmap(data, xticklabels=xticklabels, annot=True, cmap=cmap)
+    plt.xlabel(xlabel, fontdict=font2)
+    plt.ylabel(ylabel, fontdict=font2)
+    plt.title(title, fontdict=font1)
+    plt.show()
+
+
+def plot_importance(model, features):
+    num = len(features.columns)
+    feature_imp = pd.DataFrame({'Value': model.feature_importances_, 'Feature': features.columns})
+    plt.figure(figsize=(10, 10))
+    sns.set(font_scale=1)
+    sns.barplot(x="Value", y="Feature", data=feature_imp.sort_values(by="Value",
+                                                                     ascending=False)[0:num])
+    plt.title('Features')
+    plt.tight_layout()
+    plt.show()
+
+
 def main():
     filepath = "datasets/data.csv"
     is_file_exist = check_file_exist(filepath=filepath)
@@ -216,9 +248,12 @@ def main():
 
         # Let's train a model basic classification model
         results_dct = train_and_evaluate(df=df_encoded, verbose=True)
+        plot_classification_report(df_classification_report=results_dct.get('classification_report'))
+        plot_importance(model=results_dct.get('model'), features=results_dct.get('X_train'))
     else:
         raise FileNotFoundError(filepath)
 
 
 if __name__ == "__main__":
     main()
+
