@@ -242,18 +242,18 @@ def apply_scaling(df: pd.DataFrame, scaler: StandardScaler) -> pd.DataFrame:
 class MyNetModel(nn.Module):
     def __init__(self, input_features: int):
         super().__init__()
-        self.linear1 = nn.Linear(in_features=input_features, out_features=12)
-        self.linear2 = nn.Linear(in_features=12, out_features=4)
-        self.linear3 = nn.Linear(in_features=4, out_features=1)
+        self.input_layer = nn.Linear(in_features=input_features, out_features=12)
+        self.hidden_layer1 = nn.Linear(in_features=12, out_features=4)
+        self.output_layer = nn.Linear(in_features=4, out_features=1)
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
-        out = self.linear1(x)
+        out = self.input_layer(x)
         out = self.relu(out)
-        out = self.linear2(out)
+        out = self.hidden_layer1(out)
         out = self.relu(out)
-        out = self.linear3(out)
+        out = self.output_layer(out)
         out = self.sigmoid(out)
         return out
 
@@ -292,86 +292,82 @@ def predict_and_evaluate(model: MyNetModel, X, y, label: str):
     print(f"{label} Accuracy {accuracy:.3f}")
     return accuracy
 
-## Run codes
-# Load Data
-fp_train, fp_dev, fp_test = get_filepaths()
-df_train = load_dataset(fp_train)
-df_dev = load_dataset(fp_dev)
-df_test = load_dataset(fp_test)
-
-# First Insight about Data
-show_summary_table(df_train)
-show_summary_table(df_dev)
-show_summary_table(df_test)
-
-# Check outliers
-check_outliers(df=df_train, q1_ratio=.05, q3_ratio=.95)
-check_outliers(df=df_dev, q1_ratio=.05, q3_ratio=.95)
-check_outliers(df=df_test, q1_ratio=.05, q3_ratio=.95)
-
-# Fill Outliers
-df_train_filled = fill_outliers_with_boundaries(df=df_train, q1_ratio=.05, q3_ratio=.95)
-df_dev_filled = fill_outliers_with_boundaries(df=df_dev, q1_ratio=.05, q3_ratio=.95)
-df_test_filled = fill_outliers_with_boundaries(df=df_test, q1_ratio=.05, q3_ratio=.95)
-
-# Look data summary again after fill outliers
-show_summary_table(df_train_filled)
-show_summary_table(df_dev_filled)
-show_summary_table(df_test_filled)
-
-# Fill missing values
-df_train_filled = fill_missing_with_mean(df_train_filled, cols=["CO2", "Temperature"])
-show_summary_table(df_train_filled)
-
-# Convert date column & generate new features
-df_train_final = extract_info_from_date(df=df_train_filled)
-df_train_final = generate_new_features(df=df_train_final)
-
-df_dev_final = extract_info_from_date(df=df_dev_filled)
-df_dev_final = generate_new_features(df=df_dev_final)
-
-df_test_final = extract_info_from_date(df=df_test_filled)
-df_test_final = generate_new_features(df=df_test_final)
-
-#
-show_summary_table(df_train_final)
-show_summary_table(df_dev_final)
-show_summary_table(df_test_final)
-
-# I use LabelEncoder Instead of OneHotEncoder. Because in training steps there are  dimensonality
-# problem for feature space between datasets
-
-df_train_encoded = label_encoder(df=df_train_final)  # one_hot_encoder(df=df_train_final)
-df_dev_encoded = label_encoder(df=df_dev_final)  # one_hot_encoder(df=df_dev_final)
-df_test_encoded = label_encoder(df=df_test_final)  # one_hot_encoder(df=df_test_final)
-
-df_train_X, df_train_y = split_dataset(df_train_encoded)
-
-num_train_cols = grab_columns(df=df_train_X, num_cat_th=30, car_th=20).get('numerical')
-scaler_init = StandardScaler()
-scaler_init.fit(df_train_X[num_train_cols])
-
-df_train_X_scaled = apply_scaling(df=df_train_X, scaler=scaler_init)
-
-df_dev_X, df_dev_y = split_dataset(df_dev_encoded)
-df_dev_X_scaled = apply_scaling(df=df_dev_X, scaler=scaler_init)
-
-df_test_X, df_test_y = split_dataset(df_test_encoded)
-df_test_X_scaled = apply_scaling(df=df_test_X, scaler=scaler_init)
-
-
-
-X_train_torch, y_train_torch = convert_to_torch_tensor(X=df_train_X_scaled, y=df_train_y)
-X_dev_torch, y_dev_torch = convert_to_torch_tensor(X=df_dev_X_scaled, y=df_dev_y)
-X_test_torch, y_test_torch = convert_to_torch_tensor(X=df_test_X_scaled, y=df_test_y)
-
-model = train(X=X_train_torch, y=y_train_torch, n_epochs=20, lr=1e-3, batch_size=10)
-acc_train = predict_and_evaluate(model, X=X_train_torch, y=y_train_torch,label='Train')
-acc_dev = predict_and_evaluate(model, X=X_dev_torch, y=y_dev_torch,label='Dev')
-acc_test = predict_and_evaluate(model, X=X_test_torch, y=y_test_torch,label='Test')
-
-"""
-Train Accuracy 0.989
-Dev Accuracy 0.978
-Test Accuracy 0.981
-"""
+def main():
+    # Load Data
+    fp_train, fp_dev, fp_test = get_filepaths()
+    df_train = load_dataset(fp_train)
+    df_dev = load_dataset(fp_dev)
+    df_test = load_dataset(fp_test)
+    
+    # First Insight about Data
+    show_summary_table(df_train)
+    show_summary_table(df_dev)
+    show_summary_table(df_test)
+    
+    # Check outliers
+    check_outliers(df=df_train, q1_ratio=.05, q3_ratio=.95)
+    check_outliers(df=df_dev, q1_ratio=.05, q3_ratio=.95)
+    check_outliers(df=df_test, q1_ratio=.05, q3_ratio=.95)
+    
+    # Fill Outliers
+    df_train_filled = fill_outliers_with_boundaries(df=df_train, q1_ratio=.05, q3_ratio=.95)
+    df_dev_filled = fill_outliers_with_boundaries(df=df_dev, q1_ratio=.05, q3_ratio=.95)
+    df_test_filled = fill_outliers_with_boundaries(df=df_test, q1_ratio=.05, q3_ratio=.95)
+    
+    # Look data summary again after fill outliers
+    show_summary_table(df_train_filled)
+    show_summary_table(df_dev_filled)
+    show_summary_table(df_test_filled)
+    
+    # Fill missing values
+    df_train_filled = fill_missing_with_mean(df_train_filled, cols=["CO2", "Temperature"])
+    show_summary_table(df_train_filled)
+    
+    # Convert date column & generate new features
+    df_train_final = extract_info_from_date(df=df_train_filled)
+    df_train_final = generate_new_features(df=df_train_final)
+    df_dev_final = extract_info_from_date(df=df_dev_filled)
+    df_dev_final = generate_new_features(df=df_dev_final)
+    df_test_final = extract_info_from_date(df=df_test_filled)
+    df_test_final = generate_new_features(df=df_test_final)
+    
+    #Final insights
+    show_summary_table(df_train_final)
+    show_summary_table(df_dev_final)
+    show_summary_table(df_test_final)
+    
+    # I use LabelEncoder Instead of OneHotEncoder. Because in training steps there are  dimensonality
+    # problem for feature space between datasets
+    df_train_encoded = label_encoder(df=df_train_final)  # one_hot_encoder(df=df_train_final)
+    df_dev_encoded = label_encoder(df=df_dev_final)  # one_hot_encoder(df=df_dev_final)
+    df_test_encoded = label_encoder(df=df_test_final)  # one_hot_encoder(df=df_test_final)
+    
+    # Scale datasets
+    df_train_X, df_train_y = split_dataset(df_train_encoded)
+    num_train_cols = grab_columns(df=df_train_X, num_cat_th=30, car_th=20).get('numerical')
+    scaler_init = StandardScaler()
+    scaler_init.fit(df_train_X[num_train_cols])
+    df_train_X_scaled = apply_scaling(df=df_train_X, scaler=scaler_init)
+    df_dev_X, df_dev_y = split_dataset(df_dev_encoded)
+    df_dev_X_scaled = apply_scaling(df=df_dev_X, scaler=scaler_init)
+    df_test_X, df_test_y = split_dataset(df_test_encoded)
+    df_test_X_scaled = apply_scaling(df=df_test_X, scaler=scaler_init)
+    
+    # Train & Evaluate
+    X_train_torch, y_train_torch = convert_to_torch_tensor(X=df_train_X_scaled, y=df_train_y)
+    X_dev_torch, y_dev_torch = convert_to_torch_tensor(X=df_dev_X_scaled, y=df_dev_y)
+    X_test_torch, y_test_torch = convert_to_torch_tensor(X=df_test_X_scaled, y=df_test_y)
+    
+    model = train(X=X_train_torch, y=y_train_torch, n_epochs=20, lr=1e-3, batch_size=10)
+    acc_train = predict_and_evaluate(model, X=X_train_torch, y=y_train_torch,label='Train')
+    acc_dev = predict_and_evaluate(model, X=X_dev_torch, y=y_dev_torch,label='Dev')
+    acc_test = predict_and_evaluate(model, X=X_test_torch, y=y_test_torch,label='Test')
+    
+    """
+    Train Accuracy 0.989
+    Dev Accuracy 0.978
+    Test Accuracy 0.981
+    """
+    
+if __name__ == '__main__':
+    main()
