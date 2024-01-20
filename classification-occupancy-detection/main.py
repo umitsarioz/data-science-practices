@@ -2,6 +2,10 @@ import os
 import warnings
 from typing import List
 
+import matplotlib.pyplot as plt
+import numpy as np
+import random
+
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -13,6 +17,19 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 pd.set_option('display.float_format', lambda x: '%.3f' % x)
 pd.set_option('display.width', 200)
+
+
+def set_seed(seed: int = 42) -> None:
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    # When running on the CuDNN backend, two further options must be set
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    # Set a fixed value for the hash seed
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    print(f"Random seed set as {seed}")
 
 
 def get_filepaths() -> tuple:
@@ -242,9 +259,9 @@ def apply_scaling(df: pd.DataFrame, scaler: StandardScaler) -> pd.DataFrame:
 class MyNetModel(nn.Module):
     def __init__(self, input_features: int):
         super().__init__()
-        self.input_layer = nn.Linear(in_features=input_features, out_features=12)
-        self.hidden_layer1 = nn.Linear(in_features=12, out_features=4)
-        self.output_layer = nn.Linear(in_features=4, out_features=1)
+        self.input_layer = nn.Linear(in_features=input_features, out_features=32)
+        self.hidden_layer1 = nn.Linear(in_features=32, out_features=8)
+        self.output_layer = nn.Linear(in_features=8, out_features=1)
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
 
@@ -265,23 +282,44 @@ def convert_to_torch_tensor(X, y) -> tuple:
     return X, y
 
 
-def train(X, y, n_epochs=20, lr=1e-3, batch_size=10):
-    model = MyNetModel(input_features=X.shape[1])
+def train(data: dict, n_epochs=20, lr=1e-3, batch_size=200):
+    def select_training_mode(mode: str) -> bool:
+        return True if mode == 'train' else False
+
+    model = MyNetModel(input_features=data["train"]["X"].shape[1])
     loss_fn = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
+    scores = []
     for epoch in range(n_epochs):
-        for i in range(0, len(X), batch_size):
-            X_batch = X[i:i + batch_size]
-            y_pred = model(X_batch)
-            y_batch = y[i:i + batch_size]
-            loss = loss_fn(y_pred, y_batch)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-        print(f'Finished epoch {epoch}, latest loss {loss:.3f}')
+        dct = {}
+        for training_mode in ['train', 'validation', 'test']:
+            is_train = select_training_mode(mode=training_mode)
+            model.train(is_train)
+            X, y = data[training_mode].get('X'), data[training_mode].get('y')
+            for i in range(0, len(X), batch_size):
+                X_batch = X[i:i + batch_size]
+                y_pred = model(X_batch)
+                y_batch = y[i:i + batch_size]
+                loss = loss_fn(y_pred, y_batch)
+                optimizer.zero_grad()
+                if is_train:
+                    loss.backward()
+                    optimizer.step()
 
-    return model
+            with torch.no_grad():
+                y_pred = model(X)
+                accuracy = (y_pred.round() == y).float().mean()
+            dct.update(
+                {'epoch': epoch+1, f'{training_mode}_accuracy': float(accuracy), f'{training_mode}_loss': float(loss)})
+
+        print(
+            f"epoch : {dct['epoch']} || \t train-acc:{dct['train_accuracy']:.2f} \t val-acc:{dct['validation_accuracy']:.2f} \t test-acc:{dct['test_accuracy']:.2f}"
+            f"\t train-loss:{dct['train_loss']:.2f} \t val-loss:{dct['validation_loss']:.2f} \t test-loss:{dct['test_loss']:.2f}")
+        scores.append(dct)
+
+    df_scores = pd.DataFrame.from_records(scores)
+    return model, df_scores
 
 
 def predict_and_evaluate(model: MyNetModel, X, y, label: str):
@@ -292,37 +330,57 @@ def predict_and_evaluate(model: MyNetModel, X, y, label: str):
     print(f"{label} Accuracy {accuracy:.3f}")
     return accuracy
 
-def main():
+def plot_loss_and_accuracy(df_scores:pd.DataFrame,figsize:tuple,save=True):
+    fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2,figsize=figsize)
+
+    ax1.plot(df_scores["train_accuracy"], label='train-acc')
+    ax1.plot(df_scores["validation_accuracy"], label='val-acc')
+    ax1.plot(df_scores["test_accuracy"], label='test-acc')
+    ax1.set(xlabel='epoch', ylabel='scores')
+    ax1.legend(loc='best')
+
+    ax2.plot(df_scores["train_loss"], label='train-loss')
+    ax2.plot(df_scores["validation_loss"], label='val-loss')
+    ax2.plot(df_scores["test_loss"], label='test-loss')
+    ax2.set(xlabel='epoch', ylabel='scores')
+
+    ax2.legend(loc='best')
+    plt.show()
+    if save:
+        plt.savefig('model_scores.png',dpi=120)
+
+def main(seed:int,lr:float,n_epoch:int,batch_size:int) -> pd.DataFrame:
+    set_seed(seed)
     # Load Data
     fp_train, fp_dev, fp_test = get_filepaths()
     df_train = load_dataset(fp_train)
     df_dev = load_dataset(fp_dev)
     df_test = load_dataset(fp_test)
-    
+
     # First Insight about Data
     show_summary_table(df_train)
     show_summary_table(df_dev)
     show_summary_table(df_test)
-    
+
     # Check outliers
     check_outliers(df=df_train, q1_ratio=.05, q3_ratio=.95)
     check_outliers(df=df_dev, q1_ratio=.05, q3_ratio=.95)
     check_outliers(df=df_test, q1_ratio=.05, q3_ratio=.95)
-    
+
     # Fill Outliers
     df_train_filled = fill_outliers_with_boundaries(df=df_train, q1_ratio=.05, q3_ratio=.95)
     df_dev_filled = fill_outliers_with_boundaries(df=df_dev, q1_ratio=.05, q3_ratio=.95)
     df_test_filled = fill_outliers_with_boundaries(df=df_test, q1_ratio=.05, q3_ratio=.95)
-    
+
     # Look data summary again after fill outliers
     show_summary_table(df_train_filled)
     show_summary_table(df_dev_filled)
     show_summary_table(df_test_filled)
-    
+
     # Fill missing values
     df_train_filled = fill_missing_with_mean(df_train_filled, cols=["CO2", "Temperature"])
     show_summary_table(df_train_filled)
-    
+
     # Convert date column & generate new features
     df_train_final = extract_info_from_date(df=df_train_filled)
     df_train_final = generate_new_features(df=df_train_final)
@@ -330,18 +388,18 @@ def main():
     df_dev_final = generate_new_features(df=df_dev_final)
     df_test_final = extract_info_from_date(df=df_test_filled)
     df_test_final = generate_new_features(df=df_test_final)
-    
-    #Final insights
+
+    # Final insights
     show_summary_table(df_train_final)
     show_summary_table(df_dev_final)
     show_summary_table(df_test_final)
-    
+
     # I use LabelEncoder Instead of OneHotEncoder. Because in training steps there are  dimensonality
     # problem for feature space between datasets
     df_train_encoded = label_encoder(df=df_train_final)  # one_hot_encoder(df=df_train_final)
     df_dev_encoded = label_encoder(df=df_dev_final)  # one_hot_encoder(df=df_dev_final)
     df_test_encoded = label_encoder(df=df_test_final)  # one_hot_encoder(df=df_test_final)
-    
+
     # Scale datasets
     df_train_X, df_train_y = split_dataset(df_train_encoded)
     num_train_cols = grab_columns(df=df_train_X, num_cat_th=30, car_th=20).get('numerical')
@@ -352,22 +410,20 @@ def main():
     df_dev_X_scaled = apply_scaling(df=df_dev_X, scaler=scaler_init)
     df_test_X, df_test_y = split_dataset(df_test_encoded)
     df_test_X_scaled = apply_scaling(df=df_test_X, scaler=scaler_init)
-    
+
     # Train & Evaluate
     X_train_torch, y_train_torch = convert_to_torch_tensor(X=df_train_X_scaled, y=df_train_y)
     X_dev_torch, y_dev_torch = convert_to_torch_tensor(X=df_dev_X_scaled, y=df_dev_y)
     X_test_torch, y_test_torch = convert_to_torch_tensor(X=df_test_X_scaled, y=df_test_y)
-    
-    model = train(X=X_train_torch, y=y_train_torch, n_epochs=20, lr=1e-3, batch_size=10)
-    acc_train = predict_and_evaluate(model, X=X_train_torch, y=y_train_torch,label='Train')
-    acc_dev = predict_and_evaluate(model, X=X_dev_torch, y=y_dev_torch,label='Dev')
-    acc_test = predict_and_evaluate(model, X=X_test_torch, y=y_test_torch,label='Test')
-    
-    """
-    Train Accuracy 0.989
-    Dev Accuracy 0.978
-    Test Accuracy 0.981
-    """
-    
-if __name__ == '__main__':
-    main()
+
+    data = {'train': {'X': X_train_torch, 'y': y_train_torch},
+            'validation': {'X': X_dev_torch, 'y': y_dev_torch},
+            'test': {'X': X_test_torch, 'y': y_test_torch}}
+
+    model, scores = train(data=data, n_epochs=n_epoch, lr=lr, batch_size=batch_size)
+    return scores
+
+
+df_scores = main(seed=42,lr=1e-4,n_epoch=12,batch_size=10)
+plot_loss_and_accuracy(df_scores=df_scores,figsize=(15,6),save=True)
+
