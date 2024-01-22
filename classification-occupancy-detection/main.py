@@ -340,11 +340,11 @@ def train(data: dict, n_epochs=20, lr=1e-3, batch_size=200):
             model.train(is_train)
             X, y = data[training_mode].get('X'), data[training_mode].get('y')
             for i in range(0, len(X), batch_size):
+                optimizer.zero_grad()
                 X_batch = X[i:i + batch_size]
                 y_pred = model(X_batch)
                 y_batch = y[i:i + batch_size]
                 loss = loss_fn(y_pred, y_batch)
-                optimizer.zero_grad()
                 if is_train:
                     loss.backward()
                     optimizer.step()
