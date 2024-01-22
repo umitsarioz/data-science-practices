@@ -1,11 +1,10 @@
 import os
+import random
 import warnings
 from typing import List
 
 import matplotlib.pyplot as plt
 import numpy as np
-import random
-
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -254,6 +253,49 @@ def apply_scaling(df: pd.DataFrame, scaler: StandardScaler) -> pd.DataFrame:
 
     return df
 
+def eda():
+    fp_train, fp_dev, fp_test = get_filepaths()
+    df_train = load_dataset(fp_train)
+    df_dev = load_dataset(fp_dev)
+    df_test = load_dataset(fp_test)
+
+    # First Insight about Data
+    show_summary_table(df_train)
+    show_summary_table(df_dev)
+    show_summary_table(df_test)
+
+    # Check outliers
+    check_outliers(df=df_train, q1_ratio=.05, q3_ratio=.95)
+    check_outliers(df=df_dev, q1_ratio=.05, q3_ratio=.95)
+    check_outliers(df=df_test, q1_ratio=.05, q3_ratio=.95)
+
+    # Fill Outliers
+    df_train_filled = fill_outliers_with_boundaries(df=df_train, q1_ratio=.05, q3_ratio=.95)
+    df_dev_filled = fill_outliers_with_boundaries(df=df_dev, q1_ratio=.05, q3_ratio=.95)
+    df_test_filled = fill_outliers_with_boundaries(df=df_test, q1_ratio=.05, q3_ratio=.95)
+
+    # Look data summary again after fill outliers
+    show_summary_table(df_train_filled)
+    show_summary_table(df_dev_filled)
+    show_summary_table(df_test_filled)
+
+    # Fill missing values
+    df_train_filled = fill_missing_with_mean(df_train_filled, cols=["CO2", "Temperature"])
+    show_summary_table(df_train_filled)
+
+    # Convert date column & generate new features
+    df_train_final = extract_info_from_date(df=df_train_filled)
+    df_train_final = generate_new_features(df=df_train_final)
+    df_dev_final = extract_info_from_date(df=df_dev_filled)
+    df_dev_final = generate_new_features(df=df_dev_final)
+    df_test_final = extract_info_from_date(df=df_test_filled)
+    df_test_final = generate_new_features(df=df_test_final)
+
+    # Final insights
+    show_summary_table(df_train_final)
+    show_summary_table(df_dev_final)
+    show_summary_table(df_test_final)
+    return df_train_final, df_dev_final, df_test_final
 
 # Model & Training & Evaluation
 class MyNetModel(nn.Module):
@@ -311,7 +353,8 @@ def train(data: dict, n_epochs=20, lr=1e-3, batch_size=200):
                 y_pred = model(X)
                 accuracy = (y_pred.round() == y).float().mean()
             dct.update(
-                {'epoch': epoch+1, f'{training_mode}_accuracy': float(accuracy), f'{training_mode}_loss': float(loss)})
+                {'epoch': epoch + 1, f'{training_mode}_accuracy': float(accuracy),
+                 f'{training_mode}_loss': float(loss)})
 
         print(
             f"epoch : {dct['epoch']} || \t train-acc:{dct['train_accuracy']:.2f} \t val-acc:{dct['validation_accuracy']:.2f} \t test-acc:{dct['test_accuracy']:.2f}"
@@ -330,8 +373,9 @@ def predict_and_evaluate(model: MyNetModel, X, y, label: str):
     print(f"{label} Accuracy {accuracy:.3f}")
     return accuracy
 
-def plot_loss_and_accuracy(df_scores:pd.DataFrame,figsize:tuple,save=True):
-    fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2,figsize=figsize)
+
+def plot_loss_and_accuracy(df_scores: pd.DataFrame, figsize: tuple, save=True):
+    fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, figsize=figsize)
 
     ax1.plot(df_scores["train_accuracy"], label='train-acc')
     ax1.plot(df_scores["validation_accuracy"], label='val-acc')
@@ -347,64 +391,27 @@ def plot_loss_and_accuracy(df_scores:pd.DataFrame,figsize:tuple,save=True):
     ax2.legend(loc='best')
     plt.show()
     if save:
-        plt.savefig('model_scores.png',dpi=120)
+        plt.savefig('model_scores.png', dpi=120)
 
-def main(seed:int,lr:float,n_epoch:int,batch_size:int) -> pd.DataFrame:
+
+def main(seed: int, lr: float, n_epoch: int, batch_size: int) -> pd.DataFrame:
     set_seed(seed)
     # Load Data
-    fp_train, fp_dev, fp_test = get_filepaths()
-    df_train = load_dataset(fp_train)
-    df_dev = load_dataset(fp_dev)
-    df_test = load_dataset(fp_test)
-
-    # First Insight about Data
-    show_summary_table(df_train)
-    show_summary_table(df_dev)
-    show_summary_table(df_test)
-
-    # Check outliers
-    check_outliers(df=df_train, q1_ratio=.05, q3_ratio=.95)
-    check_outliers(df=df_dev, q1_ratio=.05, q3_ratio=.95)
-    check_outliers(df=df_test, q1_ratio=.05, q3_ratio=.95)
-
-    # Fill Outliers
-    df_train_filled = fill_outliers_with_boundaries(df=df_train, q1_ratio=.05, q3_ratio=.95)
-    df_dev_filled = fill_outliers_with_boundaries(df=df_dev, q1_ratio=.05, q3_ratio=.95)
-    df_test_filled = fill_outliers_with_boundaries(df=df_test, q1_ratio=.05, q3_ratio=.95)
-
-    # Look data summary again after fill outliers
-    show_summary_table(df_train_filled)
-    show_summary_table(df_dev_filled)
-    show_summary_table(df_test_filled)
-
-    # Fill missing values
-    df_train_filled = fill_missing_with_mean(df_train_filled, cols=["CO2", "Temperature"])
-    show_summary_table(df_train_filled)
-
-    # Convert date column & generate new features
-    df_train_final = extract_info_from_date(df=df_train_filled)
-    df_train_final = generate_new_features(df=df_train_final)
-    df_dev_final = extract_info_from_date(df=df_dev_filled)
-    df_dev_final = generate_new_features(df=df_dev_final)
-    df_test_final = extract_info_from_date(df=df_test_filled)
-    df_test_final = generate_new_features(df=df_test_final)
-
-    # Final insights
-    show_summary_table(df_train_final)
-    show_summary_table(df_dev_final)
-    show_summary_table(df_test_final)
+    df_train, df_dev, df_test = eda()
 
     # I use LabelEncoder Instead of OneHotEncoder. Because in training steps there are  dimensonality
     # problem for feature space between datasets
-    df_train_encoded = label_encoder(df=df_train_final)  # one_hot_encoder(df=df_train_final)
-    df_dev_encoded = label_encoder(df=df_dev_final)  # one_hot_encoder(df=df_dev_final)
-    df_test_encoded = label_encoder(df=df_test_final)  # one_hot_encoder(df=df_test_final)
+    df_train_encoded = label_encoder(df=df_train)  # one_hot_encoder(df=df_train_final)
+    df_dev_encoded = label_encoder(df=df_dev)  # one_hot_encoder(df=df_dev_final)
+    df_test_encoded = label_encoder(df=df_test)  # one_hot_encoder(df=df_test_final)
 
     # Scale datasets
     df_train_X, df_train_y = split_dataset(df_train_encoded)
     num_train_cols = grab_columns(df=df_train_X, num_cat_th=30, car_th=20).get('numerical')
+
     scaler_init = StandardScaler()
     scaler_init.fit(df_train_X[num_train_cols])
+
     df_train_X_scaled = apply_scaling(df=df_train_X, scaler=scaler_init)
     df_dev_X, df_dev_y = split_dataset(df_dev_encoded)
     df_dev_X_scaled = apply_scaling(df=df_dev_X, scaler=scaler_init)
@@ -424,6 +431,5 @@ def main(seed:int,lr:float,n_epoch:int,batch_size:int) -> pd.DataFrame:
     return scores
 
 
-df_scores = main(seed=42,lr=1e-4,n_epoch=12,batch_size=10)
-plot_loss_and_accuracy(df_scores=df_scores,figsize=(15,6),save=True)
-
+df_scores = main(seed=42, lr=1e-4, n_epoch=12, batch_size=10)
+plot_loss_and_accuracy(df_scores=df_scores, figsize=(15, 6), save=True)
