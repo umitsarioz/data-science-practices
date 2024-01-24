@@ -391,7 +391,7 @@ def plot_loss_and_accuracy(df_scores: pd.DataFrame, figsize: tuple, save=True):
     ax2.legend(loc='best')
     plt.show()
     if save:
-        plt.savefig('model_scores.png', dpi=120)
+        plt.savefig('model_scores.png')
 
 
 def main(seed: int, lr: float, n_epoch: int, batch_size: int) -> pd.DataFrame:
