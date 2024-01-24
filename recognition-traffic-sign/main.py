@@ -94,6 +94,7 @@ X_train_torch.size()
 X_val_torch.size()
 
 # There is bug on model.I need to examine calculating logic of cnn again, there are some dimensionality problems ..
+# Alternatively you can examine this repo for same project is developed with tensorflow keras: https://github.com/umitsarioz/traffic-sign-notifier
 
 class Net(nn.Module):
     def __init__(self, n_label: int, n_channel: int):
