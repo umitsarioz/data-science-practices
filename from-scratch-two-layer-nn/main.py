@@ -160,10 +160,10 @@ class TwoLayerNeuralNetwork:
 
     def accuracy_score(self, y, yhat):
         sample_size = y.shape[1]
-        gercekler = [np.argmax(y[:, i]) for i in range(sample_size)]
-        gercekler_arr = np.array(gercekler)
-        tahminler = [np.argmax(yhat[:, i]) for i in range(sample_size)]
-        tahminler_arr = np.array(tahminler)
+        y_true = [np.argmax(y[:, i]) for i in range(sample_size)]
+        y_true = np.array(gercekler)
+        y_pred = [np.argmax(yhat[:, i]) for i in range(sample_size)]
+        y_pred = np.array(tahminler)
         acc = np.round((gercekler_arr == tahminler_arr).sum() / sample_size, 2)
         return acc
 
@@ -218,6 +218,4 @@ nn = TwoLayerNeuralNetwork(layers)
 model_params, costs = nn.fit(X_train, y_train, lr=5e-5, epochs=10 ** 5)
 preds, yhat_all = nn.predict(X_test, nn)
 acc = nn.accuracy_score(y_test, yhat_all)
-
-print("Predicted Values:", preds, "\nReal Values:", y_test, "\nAccuracy:", acc)
 nn.plot_loss(costs)
